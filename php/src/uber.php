@@ -21,7 +21,7 @@ if (isset($_POST['send_access'])) {
         } else {
             $access_code = generateCode($email);
             if (sendAccessEmail($email, $access_code)) {
-                $auth_success = "Link de acesso enviado para $email. Válido por 10 minutos. <br>  Essa janela já pode ser fechada.";
+                $auth_success = "Link de acesso enviado para $email. <br>Válido por 10 minutos. <br>Essa janela já pode ser fechada.";
             } else {
             $auth_error = "Erro ao enviar e-mail. Tente novamente.";
             }
