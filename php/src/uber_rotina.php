@@ -82,8 +82,8 @@ if ($emails) {
         if (preg_match('/Você viajou com ([A-Za-z\s]+)\s+([0-9]{1,1}\.[0-9]{1,2})/', $body, $matches)) {
             $trip_data['motorista'] = trim($matches[1])." ".trim($matches[2]);
         }
-        if (preg_match('/\d{2}\s+de\s+(jan(eiro)?|fev(ereiro)?|mar(ço)?|abr(il)?|mai(o)?|jun(ho)?|jul(ho)?|ago(sto)?|set(embro)?|out(ubro)?|nov(embro)?|dez(embro)?)\s+de\s+\d{4}/', $body, $matches)) {
-            $trip_data['data'] = trim($matches[0]);
+        if (preg_match('/(R\$\s+\d{1,2}\,\d{2})\d{1,2}\s+de\s+(jan(eiro)?|fev(ereiro)?|mar(ço)?|abr(il)?|mai(o)?|jun(ho)?|jul(ho)?|ago(sto)?|set(embro)?|out(ubro)?|nov(embro)?|dez(embro)?)\s+de\s+\d{4}/', $body, $matches)) {
+            $trip_data['data'] = trim($matches[1]);
         }
         if (preg_match('/Obrigado por viajar,.*?(Beatriz)/i', $body, $matches)) {
             $trip_data['passageiro'] = trim($matches[1]);
