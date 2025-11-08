@@ -18,7 +18,8 @@ $searchText = M_body;
 $searchSubject = M_subject; 
 
 // Search for emails from noreply@uber.com containing 'Beatriz' in the body
-$emails = imap_search($inbox, 'FROM "' . $searchFrom . '" TEXT "' . $searchText .  '" SUBJECT "' . $searchSubject . '"');
+//$emails = imap_search($inbox, ' FROM "' . $searchFrom . '" TEXT "' . $searchText .  '" SUBJECT "' . $searchSubject . '"' );
+$emails = imap_search($inbox, 'UNSEEN FROM "' . $searchFrom . '" TEXT "' . $searchText .  '" SUBJECT "' . $searchSubject . '"' );
 
 if ($emails) {
     // Sort emails by date (newest first)
@@ -33,42 +34,14 @@ if ($emails) {
         $date = $header->date;
         
         $structure = imap_fetchstructure($inbox, $email_number);
-        $body = imap_body($inbox, $email_number, FT_PEEK);
-        // For multipart emails, try to get the text part
-        if (isset($structure->parts) && is_array($structure->parts)) {
-            // Try to get the plain text part (part 1)
-            $body = imap_fetchbody($inbox, $email_number, 1);
-            // If empty, try part 2 (might be HTML)
-            if (empty(trim($body))) {
-                $body = imap_fetchbody($inbox, $email_number, 2);
-            }
-        }
-        
-        $body = imap_body($inbox, $email_number, FT_PEEK);
-        // Verifica a estrutura do e-mail para decodificação correta
-        if (isset($structure->parts) && is_array($structure->parts)) {
-            $body = imap_fetchbody($inbox, $email_number, 1);
-            // Verifica o encoding (3 = BASE64, 4 = QUOTED-PRINTABLE)
-            if ($structure->parts[0]->encoding == 3) {
-                $body = base64_decode($body);
-            } elseif ($structure->parts[0]->encoding == 4) {
-                $body = quoted_printable_decode($body);
-            }
-            // Se for HTML, remove as tags
-            if ($structure->parts[0]->subtype == 'HTML') {
-                $body = strip_tags($body);
-            }
-        } else {
-            // Para e-mails não multipart
-            if ($structure->encoding == 3) {
-                $body = base64_decode($body);
-            } elseif ($structure->encoding == 4) {
-                $body = quoted_printable_decode($body);
-            }
-        }
-        // Remove espaços múltiplos e quebras de linha extras
-        $body = preg_replace('/\s+/', ' ', trim($body));
 
+        $body = imap_body($inbox, $email_number, FT_PEEK);
+        // Remoção das tags HTML
+        $body = strip_tags($body);
+        // Remove html especial characters
+        $body = html_entity_decode($body);
+        $body = imap_qprint($body);
+        
         // Extração dos dados específicos da Uber
         $trip_data = [
             'motorista' => null,
@@ -79,39 +52,37 @@ if ($emails) {
             'valor_total' => null
         ];
 
-        if (preg_match('/Você viajou com ([A-Za-z\s]+)\s+([0-9]{1,1}\.[0-9]{1,2})/', $body, $matches)) {
-            $trip_data['motorista'] = trim($matches[1])." ".trim($matches[2]);
+        if (preg_match('/You rode with ([A-Za-z\s]+)([0-9]{1,1}\.[0-9]{1,2})/', $body, $matches)) {
+            $trip_data['motorista'] = trim($matches[1]);
         }
-       if (preg_match('/\d{1,2}\/\d{1,2}\/\d{4}/', $body, $matches)) {
+       if (preg_match('/\d{1,2}\/\d{1,2}\/\d{2}/', $body, $matches)) {
             $trip_data['data'] = trim($matches[0]);
         }
-        if (preg_match('/Obrigado por viajar,.*?(Beatriz)/i', $body, $matches)) {
+        if (preg_match('/Thanks for riding,.*?('.$searchText.')/i', $body, $matches)) {
             $trip_data['passageiro'] = trim($matches[1]);
         }
-        if (preg_match('/([A-Za-z\s]+)\s+(\d+\.\d+)\s*Quilômetros\s*\|\s*(\d+\s*min)/', $body, $matches)) {
+        if (preg_match('/details([A-Za-z]+)(\d+\.\d+)\s*(kilometers).\s*(\d+\s*min)/', $body, $matches)) {
             $trip_data['tipo'] = trim($matches[1]);
             $trip_data['distancia'] = $matches[2] . ' km';
-            $trip_data['tempo'] = $matches[3];
+            $trip_data['tempo'] = $matches[4];
         }
-        if (preg_match_all('/\d{2}:\d{2}\s+([^\[\]@]+?)\s+\d{5}-\d{3}\s+/', $body, $matches)) {
-            if (count($matches[1]) >= 2) {
-                $trip_data['origem'] = trim($matches[0][0]);
-                $trip_data['destino'] = trim($matches[0][1]);
-            }
+        if (preg_match_all('/(\d{1,2}:\d{2}\s+(PM|AM))(.+\d{5}\-\d{3})(\d{1,2}:\d{2}\s+(PM|AM))(.+\d{5}\-\d{3})/', $body, $matches)) {
+            $trip_data['origem'] = trim($matches[1][0].$matches[3][0]);
+            $trip_data['destino'] = trim($matches[4][0].$matches[6][0]);
         }
-        if (preg_match('/Total\s+R\$\s*([\d,]+)/', $body, $matches)) {
+        if (preg_match('/TotalR\$\s*([\d.]+)/', $body, $matches)) {
             $trip_data['valor_total'] = 'R$ ' . $matches[1];
         }
-        if (preg_match('/^(\d{2}:\d{2})\s+(.*)$/', $trip_data['origem'], $matches)) {
+        if (preg_match('/^(\d{1,2}:\d{2})\s+(.*)$/', $trip_data['origem'], $matches)) {
             $trip_data['hr_origem'] = trim($matches[1]);
             $trip_data['origem'] = trim($matches[2]);
         }
-        if (preg_match('/^(\d{2}:\d{2})\s+(.*)$/', $trip_data['destino'], $matches)) {
+        if (preg_match('/^(\d{1,2}:\d{2})\s+(.*)$/', $trip_data['destino'], $matches)) {
             $trip_data['hr_destino'] = trim($matches[1]);
             $trip_data['destino'] = trim($matches[2]);
         }
 
-        $trip_data['data_db'] = DateTime::createFromFormat('d/m/Y', $trip_data['data'])->format('Y-m-d');
+        $trip_data['data_db'] = DateTime::createFromFormat('d/m/y', $trip_data['data'])->format('Y-m-d');
 
         try {
             $db = DatabaseConnection::getInstance()->getConnection();
@@ -133,11 +104,13 @@ if ($emails) {
                 ':motorista' => $trip_data['motorista'],
                 ':passageiro' => $trip_data['passageiro'],
                 ':tipo' => $trip_data['tipo'],
-                ':distancia' => floatval(str_replace(' km', '',$trip_data['distancia'])),
+                //':distancia' => floatval(str_replace(' km', '',$trip_data['distancia'])),
+                ':distancia' => str_replace(' km', '',$trip_data['distancia']),
                 ':tempo' => $trip_data['tempo'],
                 ':origem' => $trip_data['origem'],
                 ':destino' => $trip_data['destino'],
-                ':valor_total' => formatarValor($trip_data['valor_total']),
+               // ':valor_total' => formatarValor($trip_data['valor_total']),
+                ':valor_total' => str_repalce(['R$',' '],['',''],$trip_data['valor_total']),
                 ':hr_origem' => $trip_data['hr_origem'],
                 ':hr_destino' => $trip_data['hr_destino'],
                 ':data_hr' => $trip_data['data_db']
